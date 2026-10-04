@@ -49,6 +49,12 @@ services:
       # configuração, é colisão de porta na máquina. Usando 8180 (convenção comum p/ Keycloak).
       - '8180:8080'
     volumes:
+      # Estado do Keycloak (H2 do start-dev: usuários, senhas, role mappings) fora do container --
+      # sem isso, recriar o container zera tudo e o realm volta do export. Montado em /opt/keycloak/data
+      # (e NÃO em .../data/h2: essa pasta não existe na imagem, o volume nasceria root e o Keycloak não
+      # sobe). Com estado salvo, --import-realm pula o realm existente (IGNORE_EXISTING).
+      # Ver doc/adr-persistir-keycloak.md (repo confectionery).
+      - datavolume_confectionery_keycloak:/opt/keycloak/data
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
       # Tema de login customizado (keycloak/themes/confectionery) ativo via "loginTheme"
       # na realm -- ver realm-export.json.
@@ -143,3 +149,4 @@ networks:
     driver: bridge
 volumes:
   datavolume_confectionery_postgres:
+  datavolume_confectionery_keycloak:

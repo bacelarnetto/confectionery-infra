@@ -1,0 +1,7 @@
+# Segredos -- nunca versionar
+.env*
+!.env.example
+keycloak/secrets/
+
+# macOS
+.DS_Store

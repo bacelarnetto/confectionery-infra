@@ -1,0 +1,113 @@
+/*
+ * Identidade visual da confeitaria no login do Keycloak.
+ * Paleta = Tailwind do frontend (amber-50..700):
+ *   amber-400 #fbbf24 | amber-500 #f59e0b | amber-600 #d97706 | amber-700 #b45309
+ * Fundo: gradiente amber-50 -> amber-100, cartão branco arredondado.
+ */
+
+body#keycloak-bg {
+  background: linear-gradient(160deg, #fffbeb 0%, #fef3c7 100%);
+  background-attachment: fixed;
+}
+
+.pf-v5-c-login__container {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+.pf-v5-c-login__main {
+  border-radius: 16px;
+  box-shadow: 0 10px 30px -12px rgba(217, 119, 6, 0.25);
+}
+
+#kc-page-title {
+  color: #1f2937;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+/* ---- Branding (cabeçalho do cartão) ---- */
+
+#kc-header {
+  padding: 0 0 1.5rem;
+}
+
+.kc-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+}
+
+.kc-brand-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #f59e0b;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kc-brand-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.kc-brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+
+.kc-brand-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #b45309;
+}
+
+.kc-brand-subtitle {
+  font-size: 0.8rem;
+  color: #78716c;
+}
+
+/* ---- Formulário ---- */
+
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--BorderBottomColor: #d97706;
+  --pf-v5-c-form-control--focus--BorderBottomColor: #d97706;
+  --pf-v5-c-form-control--m-focus--BorderBottomColor: #d97706;
+}
+
+.pf-v5-c-login a {
+  color: #d97706;
+}
+
+.pf-v5-c-login a:hover {
+  color: #b45309;
+}
+
+/* ---- Botão principal ("Sign In") ---- */
+
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--Color: #fff;
+  --pf-v5-c-button--m-primary--BackgroundColor: #f59e0b;
+  --pf-v5-c-button--m-primary--BorderColor: #f59e0b;
+  --pf-v5-c-button--m-primary--hover--Color: #fff;
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: #d97706;
+  --pf-v5-c-button--m-primary--hover--BorderColor: #d97706;
+  --pf-v5-c-button--m-primary--focus--Color: #fff;
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: #d97706;
+  --pf-v5-c-button--m-primary--focus--BorderColor: #d97706;
+  --pf-v5-c-button--m-primary--active--Color: #fff;
+  --pf-v5-c-button--m-primary--active--BackgroundColor: #d97706;
+  --pf-v5-c-button--m-primary--active--BorderColor: #d97706;
+}
+
+.pf-v5-c-button.pf-m-primary:focus {
+  outline: 3px solid rgba(245, 158, 11, 0.4);
+  outline-offset: 1px;
+}

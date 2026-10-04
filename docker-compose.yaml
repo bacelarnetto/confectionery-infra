@@ -1,0 +1,145 @@
+# Nome do projeto fixo: sem isso o Compose usa o nome da pasta, e mover/renomear a pasta
+# criaria volumes novos (banco aparentemente vazio). Mantém o nome histórico "confectionery".
+name: confectionery
+
+services:
+  postgres-confectionery-db:
+    image: 'postgres:16-alpine'
+    container_name: postgres-confectionery-db
+    environment:
+      # B14 (2026-09-12): credenciais vêm do .env (substituição ${} do compose) -- nunca hardcoded aqui.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      - POSTGRES_DB=${POSTGRES_DB:-confectionery}
+      - POSTGRES_USER=${POSTGRES_USER:-root}
+    ports:
+      - '5432:5432'
+    volumes:
+      - datavolume_confectionery_postgres:/var/lib/postgresql/data
+    networks:
+      - confectionery-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Keycloak (B11) -- IdP para autenticacao/RBAC. start-dev + --import-realm carrega
+  # keycloak/realm-export.json automaticamente no boot (roles ADMIN/ESTOQUE/VENDAS/PRODUCAO,
+  # clientes publicos confectionery-web/confectionery-mobile com PKCE). Porta 8081 externa pra nao
+  # colidir com a API na 8080. Healthcheck via /dev/tcp -- a imagem oficial (baseada em ubi-micro)
+  # nao tem curl/wget disponivel.
+  keycloak:
+    image: 'quay.io/keycloak/keycloak:26.0'
+    container_name: keycloak-confectionery
+    command: start-dev --import-realm
+    environment:
+      # B14 (2026-09-12): admin do realm master vem do .env -- nunca hardcoded.
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?defina KEYCLOAK_ADMIN no .env}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?defina KEYCLOAK_ADMIN_PASSWORD no .env}
+      # KC_HOSTNAME* explícitos: sem eles o Keycloak 26 pode recusar rotear /realms/* quando a
+      # porta externa publicada (host) difere da porta interna do container (8080) -- mesmo
+      # sintoma da porta 8081 (ver nota abaixo), então deixamos isso resolvido independente do
+      # motivo real ter sido colisão de porta.
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8180
+      KC_HOSTNAME_STRICT_HTTPS: false
+    ports:
+      # Porta 8081 do host já está ocupada por outro processo Java não relacionado a este projeto
+      # (confirmado via lsof -ti:8081 -> processo de outro repo do usuário) -- não é bug de
+      # configuração, é colisão de porta na máquina. Usando 8180 (convenção comum p/ Keycloak).
+      - '8180:8080'
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      # Tema de login customizado (keycloak/themes/confectionery) ativo via "loginTheme"
+      # na realm -- ver realm-export.json.
+      - ./keycloak/themes/confectionery:/opt/keycloak/themes/confectionery:ro
+    networks:
+      - confectionery-network
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  api-confectionery:
+    image: 'bacelarnetto/confectionery:latest'
+    container_name: api-confectionery
+    restart: always
+    build:
+      context: ../confectionery
+      dockerfile: Dockerfile
+    environment:
+      TZ: America/Sao_Paulo
+      # Provisionamento de identidade no Keycloak (idempotente por design). Env explícito reforça
+      # o application-docker.yaml -- o client não deve herdar o default false do profile dev/base.
+      APP_KEYCLOAK_ADMIN_ENABLED: 'true'
+      # B14 (2026-09-12): credenciais do banco e secret do Keycloak vêm do .env (substituição ${}).
+      DB_USERNAME: ${DB_USERNAME:?defina DB_USERNAME no .env}
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no .env}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${CONFECTIONERY_SERVER_CLIENT_SECRET:?defina CONFECTIONERY_SERVER_CLIENT_SECRET no .env}
+      # Notificação (2026-09-29): outbox transacional + envio de Web Push DENTRO do próprio
+      # monólito -- sem HTTP para outro processo (decisão do dono, abandono da app separada
+      # `confectionery-notificacoes`, ver doc/requisito-notificacao-push-interno-abandonar-notificacoes-app.md).
+      # `enabled` é o interruptor mestre de TODA a feature (antes `APP_NOTIFICACAO_API_ENABLED`).
+      APP_NOTIFICACAO_ENABLED: 'true'
+      # Telefone da dona (canal WHATSAPP do outbox), E.164 só dígitos. Vazio = o listener não
+      # enfileira nada -- por isso vem do .env e não tem default silencioso.
+      APP_NOTIFICACAO_DONA_TELEFONE: ${APP_NOTIFICACAO_DONA_TELEFONE:-}
+      # Feature flag do canal WhatsApp (pausado por decisão do dono). true = volta a enfileirar WHATSAPP.
+      APP_NOTIFICACAO_WHATSAPP_ENABLED: ${APP_NOTIFICACAO_WHATSAPP_ENABLED:-false}
+      # Web Push (VAPID) -- par completo: a pública é servida em GET /push-subscription/vapid-public-key
+      # (vazia = push desligado); a privada e o subject assinam/cifram o envio real (RFC 8291/8292),
+      # feito pelo PushEnvioAdapter dentro do próprio monólito. APP_PUSH_MOCK=true (default) loga e
+      # responde sucesso simulado, sem POST real ao navegador.
+      APP_PUSH_VAPID_PUBLIC_KEY: ${APP_PUSH_VAPID_PUBLIC_KEY:-}
+      APP_PUSH_VAPID_PRIVATE_KEY: ${APP_PUSH_VAPID_PRIVATE_KEY:-}
+      APP_PUSH_VAPID_SUBJECT: ${APP_PUSH_VAPID_SUBJECT:-}
+      APP_PUSH_MOCK: ${APP_PUSH_MOCK:-true}
+    ports:
+      - '8080:8080'
+    networks:
+      - confectionery-network
+    depends_on:
+      postgres-confectionery-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    # Observabilidade (F3 -- ver doc/defesa-observabilidade.md): healthcheck real da API via
+    # /actuator/health. bash presente na imagem temurin (Ubuntu) -- /dev/tcp sem depender de
+    # curl/wget. start_period cobre o boot (Flyway + contexto).
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # Repo separado, irmão deste dentro de ~/work/confectionery-suite/ -- ajuste o `context` se
+  # clonar em outro layout. Build via Dockerfile próprio do frontend: Vite -> nginx servindo /api/* pro backend.
+  frontend-confectionery:
+    container_name: frontend-confectionery
+    restart: always
+    build:
+      context: ../confectionery-web-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - '80:80'
+    networks:
+      - confectionery-network
+    depends_on:
+      api-confectionery:
+        condition: service_healthy
+    # Healthcheck do nginx. Imagem base Alpine: nao tem bash (entao /dev/tcp invalido),
+    # but the busybox brings wget. Sem dependencia de curl externo.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+networks:
+  confectionery-network:
+    driver: bridge
+volumes:
+  datavolume_confectionery_postgres:

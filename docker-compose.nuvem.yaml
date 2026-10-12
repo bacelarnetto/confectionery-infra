@@ -1,0 +1,60 @@
+# Override para rodar na nuvem (Oracle). Uso (sempre os dois arquivos, nesta ordem):
+#   docker compose -f docker-compose.yaml -f docker-compose.nuvem.yaml up -d --build
+# ou simplesmente ./nuvem/subir-nuvem.sh. O docker-compose.yaml continua sendo o ambiente local,
+# intocado. Requer Docker Compose >= 2.24 (tags !reset/!override).
+#
+# Desenho: só o Caddy escuta na internet (80/443, HTTPS automático). Postgres, API, Keycloak e
+# frontend ficam só na rede interna do Docker. O Keycloak ganha um subdomínio próprio
+# (AUTH_DOMAIN) para o backend continuar falando com ele em http://keycloak:8080 sem mudança.
+services:
+  postgres-confectionery-db:
+    ports: !reset []
+
+  keycloak:
+    ports: !override
+      # Só no loopback da VM: para acessar o console admin por túnel SSH (ver DEPLOY-ORACLE.md).
+      - '127.0.0.1:8180:8080'
+    environment:
+      KC_HOSTNAME: https://${AUTH_DOMAIN:?defina AUTH_DOMAIN no .env}
+      KC_HOSTNAME_PORT: !reset null
+      KC_HOSTNAME_STRICT_HTTPS: !reset null
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY_HEADERS: xforwarded
+    volumes:
+      # Realm com as URLs https do app (gerado por nuvem/gerar-realm.sh) no lugar do original.
+      - ./keycloak/realm-nuvem.json:/opt/keycloak/data/import/realm-export.json:ro
+
+  api-confectionery:
+    ports: !reset []
+
+  frontend-confectionery:
+    ports: !reset []
+    build:
+      args:
+        VITE_KEYCLOAK_URL: https://${AUTH_DOMAIN:?defina AUTH_DOMAIN no .env}
+    environment:
+      KEYCLOAK_ORIGIN: https://${AUTH_DOMAIN}
+
+  caddy:
+    image: 'caddy:2-alpine'
+    container_name: caddy-confectionery
+    restart: always
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?defina APP_DOMAIN no .env}
+      AUTH_DOMAIN: ${AUTH_DOMAIN:?defina AUTH_DOMAIN no .env}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nuvem/Caddyfile:/etc/caddy/Caddyfile:ro
+      - datavolume_confectionery_caddy_data:/data
+      - datavolume_confectionery_caddy_config:/config
+    networks:
+      - confectionery-network
+    depends_on:
+      - frontend-confectionery
+      - keycloak
+
+volumes:
+  datavolume_confectionery_caddy_data:
+  datavolume_confectionery_caddy_config:

@@ -1,0 +1,15 @@
+# HTTPS automático (Let's Encrypt) para os dois subdomínios. Precisa das portas 80 e 443
+# liberadas na Oracle (Security List) e no firewall da VM.
+{$APP_DOMAIN} {
+	encode gzip
+	reverse_proxy frontend-confectionery:80
+}
+
+{$AUTH_DOMAIN} {
+	# Console admin e realm master NÃO ficam na internet. Para administrar o Keycloak, use o túnel
+	# SSH (DEPLOY-ORACLE.md, "Console admin do Keycloak"). Para liberar de vez, apague este bloco.
+	@bloqueado path /admin /admin/* /realms/master /realms/master/*
+	respond @bloqueado 403
+
+	reverse_proxy keycloak:8080
+}

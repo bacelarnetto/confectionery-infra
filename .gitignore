@@ -5,3 +5,6 @@ keycloak/secrets/
 
 # macOS
 .DS_Store
+
+# Gerado por nuvem/gerar-realm.sh
+keycloak/realm-nuvem.json
